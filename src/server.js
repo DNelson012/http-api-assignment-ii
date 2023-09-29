@@ -12,29 +12,60 @@ const urlStruct = {
     '/': htmlHandler.getIndex,
     '/style.css': htmlHandler.getCSS,
     '/client.js': htmlHandler.getScript,
-    '/success': jsonHandler.getSuccess,
-    '/badRequest': jsonHandler.getBadRequest,
-    '/unauthorized': jsonHandler.getUnauthorized,
-    '/forbidden': jsonHandler.getForbidden,
-    '/internal': jsonHandler.getInternalErr,
-    '/notImplemented': jsonHandler.getNotImplemented,
-    '/notFound': jsonHandler.notFound,
+
+    '/getUsers': jsonHandler.getUsers,
+    '/notReal': jsonHandler.notFound,
     notFound: jsonHandler.notFound,
   },
+};
+
+// Needed for POST requests, takes all the chunks of data to be sent
+//  and makes sure they are compiled correctly before handling the request
+// Largely unmodified from the parse-body demo
+const parseRequestBody = (request, response) => {
+  const body = [];
+
+  // If there's any kind of error, set the status to 400 and end the response
+  request.on('error', (err) => {
+    console.dir(err);
+    response.statusCode = 400;
+    response.end();
+  });
+
+  // Piece the data together
+  request.on('data', (chunk) => {
+    body.push(chunk);
+  });
+
+  // When all the data has been sent, concatenate the body of the request
+  //  Because the body is an encoded url, we can use query.parse to turn it into an object
+  request.on('end', () => {
+    const bodyString = Buffer.concat(body).toString();
+    const bodyParams = query.parse(bodyString);
+
+    // With the body received in full, we can call the handler function
+    jsonHandler.addUser(request, response, bodyParams);
+  });
 };
 
 // Handle requests
 const onRequest = (request, response) => {
   const parsedUrl = url.parse(request.url);
   const params = query.parse(parsedUrl.query);
-  //const acceptedTypes = request.headers.accept.split(',');
+  // const acceptedTypes = request.headers.accept.split(',');
 
-  // Use the JSON/HTML handler to handle the request
+  // If receiving a post request (with a valid url), call the associated method
+  //  Since /addUser is the only url that will be set up, it just checks for that url
+  if (request.method === 'POST' && parsedUrl.pathname === '/addUser') {
+    return parseRequestBody(request, response);
+  }
+
+  // Otherwise, assume its a GET/HEAD request
   if (urlStruct.GET[parsedUrl.pathname]) {
     return urlStruct.GET[parsedUrl.pathname](request, response, params);
   }
 
-  // If there is no matching URL, return nothing found (JSON)
+  // If it isn't any of those methods, return nothing found (JSON)
   return urlStruct.GET.notFound(request, response);
 };
 
